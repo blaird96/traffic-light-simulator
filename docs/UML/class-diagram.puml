@@ -1,0 +1,207 @@
+@startuml Traffic Simulator Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam backgroundColor white
+skinparam shadowing false
+
+' Model Classes
+package "sim.model" {
+    enum TrafficLightColor {
+        RED
+        GREEN
+        YELLOW
+    }
+    
+    class Car {
+        - id: IntegerProperty
+        - x: DoubleProperty
+        - y: DoubleProperty
+        - speedMps: DoubleProperty
+        - targetIntersectionIndex: IntegerProperty
+        + Car(id: int, x: double, y: double, speedMps: double)
+        + getId(): int
+        + getX(): double
+        + getY(): double
+        + getSpeedMps(): double
+        + setX(x: double): void
+        + setY(y: double): void
+        + getTargetIntersectionIndex(): int
+        + setTargetIntersectionIndex(index: int): void
+    }
+    
+    class Intersection {
+        - id: IntegerProperty
+        - x: DoubleProperty
+        - distanceToNext: DoubleProperty
+        - color: ObjectProperty<TrafficLightColor>
+        - greenDuration: Duration
+        - yellowDuration: Duration
+        - redDuration: Duration
+        + Intersection(id: int, x: double)
+        + getId(): int
+        + getX(): double
+        + getColor(): TrafficLightColor
+        + setColor(color: TrafficLightColor): void
+        + getGreenDuration(): Duration
+        + getYellowDuration(): Duration
+        + getRedDuration(): Duration
+    }
+    
+    class SimulationState {
+        - cars: ObservableList<Car>
+        - intersections: ObservableList<Intersection>
+        + SimulationState()
+        + getCars(): ObservableList<Car>
+        + getIntersections(): ObservableList<Intersection>
+        + addCar(car: Car): void
+        + addIntersection(intersection: Intersection): void
+    }
+}
+
+' Service Classes
+package "sim.service" {
+    class ClockService {
+        - currentTime: StringProperty
+        - executor: ScheduledExecutorService
+        - running: AtomicBoolean
+        + ClockService()
+        + start(): void
+        + stop(): void
+        + currentTimeProperty(): StringProperty
+        - updateTime(): void
+    }
+    
+    class TrafficLightService {
+        - executor: ScheduledExecutorService
+        - lightTasks: Map<Integer, ScheduledFuture<?>>
+        - running: AtomicBoolean
+        + TrafficLightService()
+        + start(): void
+        + stop(): void
+        + startLight(intersection: Intersection): void
+        + isRunning(): boolean
+    }
+    
+    class CarService {
+        - state: SimulationState
+        + CarService(state: SimulationState)
+        + tick(deltaTime: double): void
+        - updateCar(car: Car, deltaTime: double): void
+        - advanceCarPosition(car: Car, deltaTime: double): void
+    }
+}
+
+' Controller Classes
+package "sim.controller" {
+    class SimulationController {
+        - state: SimulationState
+        - carService: CarService
+        - executor: ScheduledExecutorService
+        - lock: ReentrantReadWriteLock
+        - running: AtomicBoolean
+        - paused: AtomicBoolean
+        - tickCounter: AtomicLong
+        + SimulationController(state: SimulationState)
+        + start(): void
+        + pause(): void
+        + stop(): void
+        + continueSimulation(): void
+        + getState(): SimulationState
+        + isRunning(): boolean
+        + getReadLock(): ReadLock
+    }
+}
+
+' UI Classes
+package "sim.ui" {
+    class TrafficSimulatorView {
+        - worldPane: Pane
+        - intersectionsTable: TableView<Intersection>
+        - carsTable: TableView<Car>
+        - controller: SimulationController
+        - renderTimer: AnimationTimer
+        + TrafficSimulatorView()
+        + setController(controller: SimulationController): void
+        + setClockService(clockService: ClockService): void
+        - renderWorld(): void
+        - renderIntersection(...): void
+        - renderCar(...): void
+    }
+}
+
+' Main Application
+package "sim" {
+    class MainApp {
+        - controller: SimulationController
+        - clockService: ClockService
+        - trafficLightService: TrafficLightService
+        - state: SimulationState
+        - view: TrafficSimulatorView
+        - seed: long
+        + start(primaryStage: Stage): void
+        - showAddCarDialog(): void
+        - showAddIntersectionDialog(): void
+        - showSettingsDialog(): void
+        - loadDemoScenario(): void
+    }
+}
+
+' Relationships
+
+' Composition: SimulationState contains Cars and Intersections
+SimulationState *-- "0..*" Car : contains >
+SimulationState *-- "0..*" Intersection : contains >
+
+' Association: Intersection uses TrafficLightColor
+Intersection --> TrafficLightColor : uses >
+
+' MainApp creates and manages services
+MainApp --> SimulationController : creates/manages >
+MainApp --> ClockService : creates/manages >
+MainApp --> TrafficLightService : creates/manages >
+MainApp --> SimulationState : creates >
+MainApp --> TrafficSimulatorView : creates >
+
+' SimulationController manages simulation
+SimulationController --> SimulationState : references >
+SimulationController *-- CarService : contains >
+
+' CarService operates on SimulationState
+CarService --> SimulationState : reads/updates >
+
+' TrafficLightService operates on Intersections
+TrafficLightService ..> Intersection : updates >
+
+' TrafficSimulatorView renders simulation
+TrafficSimulatorView --> SimulationController : observes >
+TrafficSimulatorView --> ClockService : observes >
+
+' Notes
+note right of SimulationState
+  Observable lists enable
+  automatic UI binding
+end note
+
+note right of SimulationController
+  20 Hz tick rate
+  Thread-safe with
+  ReentrantReadWriteLock
+end note
+
+note right of ClockService
+  1 Hz update rate
+  Independent thread
+end note
+
+note right of TrafficLightService
+  Independent threads
+  per intersection
+end note
+
+note right of TrafficSimulatorView
+  60 FPS rendering
+  AnimationTimer
+end note
+
+@enduml
